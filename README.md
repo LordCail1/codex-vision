@@ -33,9 +33,13 @@ If you are developing locally from source instead, you still need Rust plus a no
 ```bash
 codex-vision web
 codex-vision web --all
+codex-vision web --cwd ~/gitclones/tarology
 codex-vision tui
+codex-vision tui --cwd ~/gitclones/tarology
 codex-vision snapshot --json
+codex-vision snapshot --json --cwd ~/gitclones/tarology
 codex-vision doctor
+codex-vision doctor --cwd ~/gitclones/tarology
 ```
 
 The web UI binds to `127.0.0.1` and opens a browser unless you pass `--no-open`.
@@ -52,6 +56,7 @@ cargo run -- doctor
 ## Notes
 
 - The current workspace is selected automatically from the directory you launch from.
+- Use `--cwd <path>` if you want to inspect another repo or worktree without changing shells first.
 - If you launch from a Git worktree, codex-vision also treats sibling worktrees and the main checkout from the same repo as related when it can infer that relationship.
 - v1 is read-only by design. Session archive/delete flows stay in `codex-cleaner`.
 - `doctor` reports Codex storage detection, Git/tmux/compiler availability, and a graph summary from a real scan.

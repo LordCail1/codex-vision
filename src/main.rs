@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use anyhow::Result;
 use clap::{Parser, Subcommand};
@@ -22,6 +22,8 @@ enum Command {
     Web {
         #[arg(long)]
         all: bool,
+        #[arg(long, value_name = "PATH")]
+        cwd: Option<PathBuf>,
         #[arg(long)]
         port: Option<u16>,
         #[arg(long)]
@@ -30,8 +32,12 @@ enum Command {
     Tui {
         #[arg(long)]
         all: bool,
+        #[arg(long, value_name = "PATH")]
+        cwd: Option<PathBuf>,
     },
     Serve {
+        #[arg(long, value_name = "PATH")]
+        cwd: Option<PathBuf>,
         #[arg(long)]
         port: Option<u16>,
     },
@@ -40,10 +46,14 @@ enum Command {
         json: bool,
         #[arg(long)]
         all: bool,
+        #[arg(long, value_name = "PATH")]
+        cwd: Option<PathBuf>,
     },
     Doctor {
         #[arg(long)]
         json: bool,
+        #[arg(long, value_name = "PATH")]
+        cwd: Option<PathBuf>,
     },
 }
 
@@ -52,8 +62,13 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Command::Web { all, port, no_open } => {
-            let scanner = GraphScanner::new(ScanConfig::discover(scope(all))?);
+        Command::Web {
+            all,
+            cwd,
+            port,
+            no_open,
+        } => {
+            let scanner = GraphScanner::new(ScanConfig::discover_in(scope(all), cwd)?);
             let service = Arc::new(GraphService::start(scanner)?);
             let address = web::run_server(Arc::clone(&service), port).await?;
             let url = web::launch_url(address);
@@ -63,13 +78,13 @@ async fn main() -> Result<()> {
             }
             tokio::signal::ctrl_c().await?;
         }
-        Command::Tui { all } => {
-            let scanner = GraphScanner::new(ScanConfig::discover(scope(all))?);
+        Command::Tui { all, cwd } => {
+            let scanner = GraphScanner::new(ScanConfig::discover_in(scope(all), cwd)?);
             let service = GraphService::start(scanner)?;
             tokio::task::spawn_blocking(move || tui::run(service.subscribe())).await??;
         }
-        Command::Serve { port } => {
-            let scanner = GraphScanner::new(ScanConfig::discover(ScopeMode::Current)?);
+        Command::Serve { cwd, port } => {
+            let scanner = GraphScanner::new(ScanConfig::discover_in(ScopeMode::Current, cwd)?);
             let service = Arc::new(GraphService::start(scanner)?);
             let address = web::run_server(service, port).await?;
             println!(
@@ -78,13 +93,13 @@ async fn main() -> Result<()> {
             );
             tokio::signal::ctrl_c().await?;
         }
-        Command::Snapshot { json: _, all } => {
-            let scanner = GraphScanner::new(ScanConfig::discover(scope(all))?);
+        Command::Snapshot { json: _, all, cwd } => {
+            let scanner = GraphScanner::new(ScanConfig::discover_in(scope(all), cwd)?);
             let graph = scanner.scan()?;
             println!("{}", serde_json::to_string_pretty(&graph)?);
         }
-        Command::Doctor { json } => {
-            doctor::run(json)?;
+        Command::Doctor { json, cwd } => {
+            doctor::run(json, cwd)?;
         }
     }
 
