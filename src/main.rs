@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use codex_vision::{
+    doctor,
     model::ScopeMode,
     scanner::{GraphScanner, ScanConfig},
     service::GraphService,
@@ -39,6 +40,10 @@ enum Command {
         json: bool,
         #[arg(long)]
         all: bool,
+    },
+    Doctor {
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -77,6 +82,9 @@ async fn main() -> Result<()> {
             let scanner = GraphScanner::new(ScanConfig::discover(scope(all))?);
             let graph = scanner.scan()?;
             println!("{}", serde_json::to_string_pretty(&graph)?);
+        }
+        Command::Doctor { json } => {
+            doctor::run(json)?;
         }
     }
 

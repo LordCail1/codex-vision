@@ -1,0 +1,157 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.release.outputs.release_id }}
+      release_tag: ${{ steps.meta.outputs.release_tag }}
+    steps:
+      - name: Resolve release tag
+        id: meta
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "release_tag=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "release_tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or reuse release
+        id: release
+        uses: actions/github-script@v8
+        env:
+          RELEASE_TAG: ${{ steps.meta.outputs.release_tag }}
+        with:
+          script: |
+            const tag = process.env.RELEASE_TAG;
+            const { owner, repo } = context.repo;
+            let release;
+            try {
+              release = await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              release = await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: tag,
+                draft: false,
+                prerelease: false,
+                generate_release_notes: true,
+              });
+            }
+            core.setOutput("release_id", String(release.data.id));
+
+  build-and-upload:
+    needs: create-release
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: codex-vision
+            asset: codex-vision-x86_64-unknown-linux-gnu.tar.gz
+          - runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: codex-vision.exe
+            asset: codex-vision-x86_64-pc-windows-msvc.zip
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            binary: codex-vision
+            asset: codex-vision-aarch64-apple-darwin.tar.gz
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: codex-vision
+            asset: codex-vision-x86_64-apple-darwin.tar.gz
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+      - name: Build release binary
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Package release asset (Unix)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p package
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" package/codex-vision
+          cp README.md package/README.md
+          tar -C package -czf "${{ matrix.asset }}" codex-vision README.md
+
+      - name: Package release asset (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force package | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.binary }}" "package/codex-vision.exe"
+          Copy-Item README.md package/README.md
+          Compress-Archive -Path package/codex-vision.exe,package/README.md -DestinationPath "${{ matrix.asset }}" -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.asset }}
+          path: ${{ matrix.asset }}
+
+      - name: Upload release asset
+        uses: actions/github-script@v8
+        env:
+          RELEASE_ID: ${{ needs.create-release.outputs.release_id }}
+          ASSET_PATH: ${{ matrix.asset }}
+        with:
+          script: |
+            const fs = require("fs");
+            const path = process.env.ASSET_PATH;
+            const name = path.split(/[\\/]/).pop();
+            const data = fs.readFileSync(path);
+            const release_id = Number(process.env.RELEASE_ID);
+            const { owner, repo } = context.repo;
+
+            const assets = await github.paginate(github.rest.repos.listReleaseAssets, {
+              owner,
+              repo,
+              release_id,
+              per_page: 100,
+            });
+            const existing = assets.find((asset) => asset.name === name);
+            if (existing) {
+              await github.rest.repos.deleteReleaseAsset({
+                owner,
+                repo,
+                asset_id: existing.id,
+              });
+            }
+
+            await github.rest.repos.uploadReleaseAsset({
+              owner,
+              repo,
+              release_id,
+              name,
+              data,
+              headers: {
+                "content-type": name.endsWith(".zip") ? "application/zip" : "application/gzip",
+                "content-length": data.length,
+              },
+            });

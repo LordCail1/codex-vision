@@ -705,7 +705,13 @@ mod tests {
         assert_eq!(node.parent_id.as_deref(), Some("root-thread"));
         assert!(node.workspace_match);
         assert_eq!(node.git_branch.as_deref(), Some("feature/test"));
-        assert_eq!(graph.warnings.len(), 1);
+        assert_eq!(node.status, crate::model::SessionStatus::Orphaned);
+        assert!(
+            graph
+                .warnings
+                .iter()
+                .any(|warning| warning.contains("references missing parent"))
+        );
 
         Ok(())
     }
