@@ -179,12 +179,22 @@ fn flatten<'a>(
 }
 
 fn render(frame: &mut Frame, app: &TuiApp) {
+    let outer = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(5), Constraint::Min(0)])
+        .split(frame.area());
     let layout = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(45), Constraint::Percentage(55)])
-        .split(frame.area());
+        .split(outer[1]);
     let lines = app.visible_nodes();
     let selected = lines.get(app.selected).copied();
+    let workspace_matches = app
+        .graph
+        .nodes
+        .iter()
+        .filter(|node| node.workspace_match)
+        .count();
 
     let title = format!(
         "Sessions [{}] {} {}",
@@ -203,6 +213,33 @@ fn render(frame: &mut Frame, app: &TuiApp) {
             "archived-off"
         }
     );
+    let workspace_title = format!(
+        "Workspace {}",
+        match app.scope {
+            ScopeMode::Current => "current",
+            ScopeMode::All => "all",
+        }
+    );
+    let workspace_lines = vec![
+        Line::from(format!("Launch workspace: {}", app.graph.launch_cwd)),
+        Line::from(format!(
+            "Repo root: {} | workspace matches: {} | scanned: {}",
+            app.graph
+                .launch_repo_root
+                .as_deref()
+                .unwrap_or("not detected"),
+            workspace_matches,
+            app.graph.nodes.len()
+        )),
+    ];
+    let workspace = Paragraph::new(workspace_lines)
+        .block(
+            Block::default()
+                .title(workspace_title)
+                .borders(Borders::ALL),
+        )
+        .wrap(Wrap { trim: false });
+    frame.render_widget(workspace, outer[0]);
 
     let items: Vec<ListItem> = lines
         .iter()
@@ -292,6 +329,9 @@ fn detail_text(node: &SessionNode) -> Vec<Line<'static>> {
         lines.push(Line::from(format!("Repo URL: {repo_url}")));
     }
     lines.push(Line::from(""));
+    lines.push(Line::from(
+        "Workspace view: launch workspace drives current-scope matching",
+    ));
     lines.push(Line::from(
         "Keys: q quit, a toggle scope, x active-only, z archived",
     ));

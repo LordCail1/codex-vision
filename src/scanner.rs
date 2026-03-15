@@ -1,6 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs::File,
+    fs::{self, File},
     io::{BufRead, BufReader},
     path::{Path, PathBuf},
     process::Command,
@@ -28,8 +28,11 @@ pub struct ScanConfig {
 
 impl ScanConfig {
     pub fn discover(initial_scope: ScopeMode) -> Result<Self> {
-        let launch_cwd =
-            std::env::current_dir().context("failed to determine current directory")?;
+        Self::discover_in(initial_scope, None::<PathBuf>)
+    }
+
+    pub fn discover_in(initial_scope: ScopeMode, cwd_override: Option<PathBuf>) -> Result<Self> {
+        let launch_cwd = resolve_launch_cwd(cwd_override)?;
         let codex_home = std::env::var_os("CODEX_HOME")
             .map(PathBuf::from)
             .or_else(|| home_dir().map(|path| path.join(".codex")))
@@ -53,6 +56,37 @@ impl ScanConfig {
             initial_scope,
         })
     }
+}
+
+fn resolve_launch_cwd(cwd_override: Option<PathBuf>) -> Result<PathBuf> {
+    let launch_cwd = match cwd_override {
+        Some(path) => {
+            if path.is_absolute() {
+                path
+            } else {
+                std::env::current_dir()
+                    .context("failed to determine current directory for relative --cwd")?
+                    .join(path)
+            }
+        }
+        None => std::env::current_dir().context("failed to determine current directory")?,
+    };
+
+    let metadata = fs::metadata(&launch_cwd)
+        .with_context(|| format!("failed to access launch workspace {}", launch_cwd.display()))?;
+    if !metadata.is_dir() {
+        anyhow::bail!(
+            "launch workspace {} is not a directory",
+            launch_cwd.display()
+        );
+    }
+
+    fs::canonicalize(&launch_cwd).with_context(|| {
+        format!(
+            "failed to canonicalize launch workspace {}",
+            launch_cwd.display()
+        )
+    })
 }
 
 #[derive(Debug, Clone, Default)]
@@ -728,6 +762,32 @@ mod tests {
             Some("codex-vision"),
             None,
         ));
+    }
+
+    #[test]
+    fn discover_uses_explicit_launch_workspace() -> Result<()> {
+        let temp = tempdir()?;
+        let workspace = temp.path().join("workspace");
+        fs::create_dir_all(&workspace)?;
+
+        let config = ScanConfig::discover_in(ScopeMode::Current, Some(workspace.clone()))?;
+
+        assert_eq!(config.launch_cwd, fs::canonicalize(&workspace)?);
+        Ok(())
+    }
+
+    #[test]
+    fn discover_rejects_missing_launch_workspace() {
+        let err = ScanConfig::discover_in(
+            ScopeMode::Current,
+            Some(PathBuf::from("/definitely/missing/codex-vision-workspace")),
+        )
+        .expect_err("missing workspace should fail");
+
+        assert!(
+            err.to_string()
+                .contains("failed to access launch workspace")
+        );
     }
 
     fn create_state_db(path: &Path) -> Result<()> {

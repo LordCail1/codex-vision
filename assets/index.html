@@ -48,11 +48,41 @@
         color: var(--muted);
       }
 
+      .workspace-banner {
+        margin: 14px 24px 0;
+        padding: 14px 16px;
+        display: grid;
+        gap: 8px;
+        background: rgba(255, 250, 242, 0.78);
+        border: 1px solid rgba(200, 189, 168, 0.9);
+        border-radius: 18px;
+        box-shadow: 0 14px 32px rgba(23, 33, 43, 0.06);
+      }
+
+      .workspace-banner strong {
+        display: inline-block;
+        margin-right: 8px;
+      }
+
+      .workspace-banner code {
+        font-family: "IBM Plex Mono", "Cascadia Code", monospace;
+        font-size: 0.95rem;
+        word-break: break-word;
+      }
+
+      .workspace-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 18px;
+        color: var(--muted);
+        font-size: 0.95rem;
+      }
+
       .controls {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        padding: 0 24px 18px;
+        padding: 14px 24px 18px;
         align-items: center;
       }
 
@@ -199,6 +229,7 @@
       <h1>codex-vision</h1>
       <p>Git-like lineage for local Codex sessions, live from your machine.</p>
     </header>
+    <section id="workspace-banner" class="workspace-banner"></section>
     <section class="controls">
       <button id="scope-current" class="is-active" type="button">Current workspace</button>
       <button id="scope-all" type="button">All sessions</button>

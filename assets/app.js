@@ -9,6 +9,7 @@ const state = {
 const graphEl = document.getElementById("graph");
 const summaryEl = document.getElementById("summary");
 const detailsEl = document.getElementById("details");
+const workspaceEl = document.getElementById("workspace-banner");
 const currentButton = document.getElementById("scope-current");
 const allButton = document.getElementById("scope-all");
 const activeOnlyInput = document.getElementById("active-only");
@@ -74,6 +75,7 @@ function render() {
   );
 
   updateScopeButtons();
+  renderWorkspace(filteredNodes);
   renderSummary(filteredNodes);
   renderGraph(filteredNodes, filteredEdges);
   renderDetails(filteredNodes);
@@ -82,6 +84,30 @@ function render() {
 function updateScopeButtons() {
   currentButton.classList.toggle("is-active", state.scope === "current");
   allButton.classList.toggle("is-active", state.scope === "all");
+}
+
+function renderWorkspace(nodes) {
+  const repoRoot = state.graph.launch_repo_root
+    ? `<div><strong>Repo root</strong><code title="${escapeAttribute(state.graph.launch_repo_root)}">${escape(state.graph.launch_repo_root)}</code></div>`
+    : `<div><strong>Repo root</strong><span>not detected</span></div>`;
+  const workspaceMatches = state.graph.nodes.filter((node) => node.workspace_match).length;
+  const visibleLabel =
+    state.scope === "current"
+      ? `${nodes.length} visible in current workspace`
+      : `${nodes.length} visible from all sessions`;
+
+  workspaceEl.innerHTML = `
+    <div>
+      <strong>Launch workspace</strong>
+      <code title="${escapeAttribute(state.graph.launch_cwd)}">${escape(state.graph.launch_cwd)}</code>
+    </div>
+    ${repoRoot}
+    <div class="workspace-meta">
+      <span>${visibleLabel}</span>
+      <span>${workspaceMatches} total workspace matches</span>
+      <span>${state.graph.nodes.length} total scanned sessions</span>
+    </div>
+  `;
 }
 
 function renderSummary(nodes) {
@@ -274,4 +300,8 @@ function escape(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function escapeAttribute(value) {
+  return escape(value).replaceAll("'", "&#39;");
 }

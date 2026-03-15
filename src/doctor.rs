@@ -1,4 +1,8 @@
-use std::{env, path::Path, process::Command};
+use std::{
+    env,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use anyhow::{Context, Result};
 use serde::Serialize;
@@ -57,8 +61,8 @@ pub struct DoctorReport {
     pub checks: Vec<DoctorCheck>,
 }
 
-pub fn run(json: bool) -> Result<()> {
-    let report = generate_report()?;
+pub fn run(json: bool, cwd_override: Option<PathBuf>) -> Result<()> {
+    let report = generate_report(cwd_override)?;
     if json {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else {
@@ -67,8 +71,8 @@ pub fn run(json: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn generate_report() -> Result<DoctorReport> {
-    let config = ScanConfig::discover(crate::model::ScopeMode::Current)?;
+pub fn generate_report(cwd_override: Option<PathBuf>) -> Result<DoctorReport> {
+    let config = ScanConfig::discover_in(crate::model::ScopeMode::Current, cwd_override)?;
     let graph = GraphScanner::new(config.clone()).scan();
 
     let mut checks = vec![
